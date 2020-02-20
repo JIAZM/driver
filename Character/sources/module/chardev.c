@@ -20,7 +20,8 @@ int reg_magor = 232;
 int reg_minor = 0;
 char *buffer;
 int flag = 0;
-
+char *kbuf = NULL;
+char kbuf_rd[4] = "abc";
 /* 
  * open file interface
  */
@@ -38,7 +39,23 @@ int testOpen(struct inode *p, struct file *f)
  */
 ssize_t testWrite(struct file *f, const char __user *u, size_t s, loff_t *l)
 {
+	int len = 0;
+
 	printk(KERN_EMERG"test write function \n");
+
+	if(kbuf == NULL){
+		kbuf = (char *)kzalloc(sizeof(char) * s, GFP_KERNEL);
+		if(kbuf == NULL){
+			printk(KERN_EMERG"Create memory block for test write failed \n");
+			return -ENOMEM;
+		}
+	}
+	len = copy_from_user(kbuf, u, s);
+	if (len != 0){
+		printk(KERN_EMERG"copy from user space failed \n");
+		return -ENOMEM;
+	}
+	printk(KERN_EMERG"Get string : %s \n", kbuf);
 
 	return 0;
 }
@@ -49,7 +66,42 @@ ssize_t testWrite(struct file *f, const char __user *u, size_t s, loff_t *l)
  */
 ssize_t testRead(struct file *f, char __user *u, size_t s, loff_t *l)
 {
+	int len = 0;
+
 	printk(KERN_EMERG"test read function \n");
+
+	len = copy_to_user(u, kbuf_rd, 4);
+	if (len != 0){
+		printk(KERN_EMERG"copy %d Bytes to user space failed \n", len);
+		return -ENOMEM;
+	}
+	printk(KERN_EMERG"Send string : %s \n", kbuf_rd);
+
+	return 0;
+}
+
+/*
+ * ioctl() 函数实现
+ */
+#ifndef ARGS_LIMIT
+#define ARGS_LIMIT	4
+#endif
+
+static long testIOctl(struct file *f, unsigned int cmd, unsigned long arg)
+{
+	printk(KERN_EMERG"Get into ioctl() \n");
+	switch(cmd){
+		case 0:
+			printk(KERN_EMERG"Do nothing in ioctl() \n");
+			break;
+		case 1:
+			if(arg > ARGS_LIMIT)
+				return -EINVAL;
+			printk(KERN_EMERG"Get command %d and arg %ld in ioctl() \n", cmd, arg);
+			break;
+		default:
+			return -EINVAL;
+	}
 
 	return 0;
 }
@@ -77,6 +129,7 @@ int charDevInit(void)
 	gFile->open = testOpen;
 	gFile->read = testRead;
 	gFile->write = testWrite;
+	gFile->unlocked_ioctl = testIOctl;
 	gFile->owner = THIS_MODULE;
 
 	cdev_init(gDev, gFile);
@@ -96,6 +149,9 @@ void __exit charDevExit(void)
 
 	kfree(gFile);
 	printk(KERN_EMERG"free memory space struct file_operations \n");
+
+	kfree(kbuf);
+	printk(KERN_EMERG"free memory space kbuf \n");
 
 	return ;
 }
