@@ -59,9 +59,23 @@ printk();
 
 ## ***<u>内核空间申请内存</u>***
 ```C
-(void *) kzalloc(size， GFP_KERNEL);  // 将申请到的空间中值全部清零
-(void *) kzalloc(size， GFP_DMA);
-(void *) kmalloc();  // 申请空间
+static inline void *kzalloc(size_t size, gfp_t flags);  // 将申请到的空间中值全部清零
+void *kmalloc(size_t size, gfp_t flags);  // 申请空间，不清零
+// 释放内存空间
+void kfree(const void *objp);
+/*
+* flags:
+* |-进程上下文，可以睡眠     GFP_KERNEL
+* |-进程上下文，不可以睡眠    GFP_ATOMIC
+* | |-中断处理程序          GFP_ATOMIC
+* | |-软中断               GFP_ATOMIC
+* | |-Tasklet             GFP_ATOMIC
+* |-用于DMA的内存，可以睡眠         GFP_DMA | GFP_KERNEL
+* |-用于DMA的内存，不可以睡眠       GFP_DMA | GFP_ATOMIC
+*/
+
+void *vmalloc(unsigned long size);  // 创建一块虚拟地址连续的内存空间, 不能保证物理地址连续     分配内存是可能产生阻塞
+void vfree(const void *addr);
 ```
 
 ## ***<u>驱动模块编译</u>***
