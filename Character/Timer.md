@@ -60,7 +60,31 @@ struct timer_list {
 ## linux定时器使用实例
 - 内核注册定时器最终都会通过调用 internal_add_timer 来实现，具体工作方式：
     1. 如果定时器在接下来的 0~255 个 jiffies 中到期，则将定时器添加到 v1
-    2. 如果定时器在接下来的 255*64 个 jiffies 中到期，则将定时器添加到 v2
-    3. 如果定时器在接下来的 255*64*64 个 jiffies 中到期，则将定时器添加到 v3
-    4. 如果定时器在接下来的 255*64*64*64 个jiffies 中到期，则将定时器添加到 v4
+    2. 如果定时器在接下来的 255 * 64 个 jiffies 中到期，则将定时器添加到 v2
+    3. 如果定时器在接下来的 255 * 64 * 64 个 jiffies 中到期，则将定时器添加到 v3
+    4. 如果定时器在接下来的 255 * 64 * 64 * 64 个jiffies 中到期，则将定时器添加到 v4
     5. 如果有更大的超时时间，则利用0xffffffff来计算 hash ，然后插入到 v5 (这个只会出现在64bit的系统中)
+
+## ***定时器的调度与处理的过程***
+```C
+/*
+ * 参考 init/main.c 文件中 start_kernel函数
+ */
+asmlinkage __visible void __init start_kernel(void); //具体内容见内核代码
+// 定时器对应初始化语句
+init_timers();
+// 在 kernel/timer.c 中定义
+void __init init_timers(void)
+{
+    init_timer_cpus();
+    open_softirq(TIMER_SOFTIRQ, run_timer_softirq); // 注册软中断
+}
+```
+
+<u>***在 linux 内核中将中断处理程序分为两个部分：上半部 / 下半部***</u>
+- 上半部
+    > 中断处理程序——完成实时性要求高的操作  
+    > 实现必要的代码，对实时性要求高，太过繁琐容易造成丢中断  
+- 下半部
+    > 繁琐的、占用时间长的代码在下半部中实现  
+    > 下半部代码可以被硬件中断打断
