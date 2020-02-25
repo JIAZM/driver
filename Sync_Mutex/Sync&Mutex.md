@@ -65,8 +65,56 @@ int testOpen(struct inode *p, struct file *f)
 
 
 - ## ***自旋锁***
+    ***<u>得到自旋锁后不能引起阻塞，否则会引起死锁</u>***  
+    - ### Linux 内核中可能引起互斥访问的情形
+      1. 进程和进程之间 - 信号量
+      2. 进程和其他内核代码 - 自旋锁
+      3. 进程和中断代码 - 自旋锁
+      > 自旋锁最多只能被一个内核任务持有。若锁未被持有，请求她的任务便立即得到她并且执行  
+      > 若一个内核任务试图请求一个已经被别的内核任务持有的自旋锁  
+      > CPU会一直进行：忙循环——旋转——等待锁重新可用
+
+    - ### ***自旋锁的使用方法***
+        ```C
+        spinlock_t my_lock = SPIN_LOCK_UNLOCKED;    // 静态初始化自旋锁
+        void spin_lock_init(spinlock_t *lock);
+        // 动态初始化自旋锁
+        void spin_lock(spinlock_t *lock);
+        // 得到自旋锁
+        void spin_unlock(spinlock_t *lock);
+        // 释放自旋锁
+        ```
+    - ### ***衍生函数***
+        > 尽管自旋锁可以保证临界区不受别的执行单元抢占打扰  
+        > 得到锁的代码在执行临界区时仍然可能受到本地中断的影响
+        > 为了防止这种影响，需要用到自旋锁的衍生函数
+        ```C
+        void spin_lock_irqsave(spinlock_t *lock, unsigned long flags);
+        // 获得自旋锁之前禁止本地 CPU 中断，之前的中断状态保存在flags中，可以避免进程上下文(共享资源的访问)被本地硬件中断打断
+        // 相应的释放函数:
+        void spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags);
+
+        void spin_lock_irq(spinlock_t *lock);
+        // 获得自旋锁之前禁止本地 CPU 中断，但不保存中断状态
+        // 相应的释放函数:
+        void spin_unlock_irq(spinlock_t *lock);
+
+        void spin_lock_bh(spinlock_t *lock);
+        // 获得自旋锁之前禁止软中断，允许硬件中断
+        // 相应的释放函数:
+        void spin_unlock_bh(spinlock_t *lock);
+        ```
+    - ## ***自旋锁的使用案例***
+        > drivers/net/8139cp.c 文件 cp_close() 进程上下文，cp_interrupt() 中断  
+    - ## ***自旋锁使用注意***
+        1. 会有系统开销(CPU 忙等)，不可以滥用
+        2. 不可以长期加锁
+        3. 在持有自旋锁的同时，不能持有信号量(不能调用会引起阻塞的函数，容易引起死锁)
+        4. 在持有自旋锁的同时，不能在二次持有她(引起死锁)
 
 - ## ***其他同步方法***
     - 原子操作
-        - 原子整数操作
-        - 原子位操作
+        - 原子整数操作  
+            在 atomic.h 文件中定义
+        - 原子位操作  
+            在 bitops.h 文件中定义
