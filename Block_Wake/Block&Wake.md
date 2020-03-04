@@ -39,83 +39,104 @@ struct __wait_queue_head{
     struct list_head task_list; // 等待队列 - 双向链表
 };  // 在 include/linux/wait.h 中定义
 typedef struct __wait_queue_head wait_queue_head_t;
-
-/* 等待队列定义 */
-static wait_queue_head_t testqueue;
-/*
- * 在 linux-4.15 中定义为
- * struct wait_queue_head {
- *     spinlock_t              lock;
- *     struct list_head        head;
- * };
- * typedef struct wait_queue_head wait_queue_head_t;
- */
-// 初始化调用方法
-init_waitqueue_head(&testqueue);
-/*
- * extern void __init_waitqueue_head(struct wait_queue_head *wq_head, const char *name, struct lock_class_key *);
- *
- * #define init_waitqueue_head(wq_head)                         \
- *     do {
- *         static struct lock_class_key __key;                  \
- *         __init_waitqueue_head((wq_head), #wq_head, &__key);  \
- *     }while(0)
- *
- * void __init_waitqueue_head(struct wait_queue_head *wq_head, const char *name, struct lock_class_key *key)
- * {
- *         spin_lock_init(&wq_head->lock);
- *         lockdep_set_class_and_name(&wq_head->lock, key, name);
- *         INIT_LIST_HEAD(&wq_head->head);
- * }
- */
-
-
-// Linux 内核提供的睡眠函数 在 include/linux/wait.h 中声明
-wait_event(queue, contidion);
-// 以 wait_event 为例，具体的调用代码见 include/linux/wait.h
-/*
- * 调用 wait_event()
- * 对结构 struct wait_queue_entry 初始化
- * struct wait_queue_entry {
- *     unsigned int        flags;
- *     void                *private;    // 指向当前进程结构体 - 进程控制块
- *     wait_queue_func_t   func;
- *     struct list_head    entry;
- * };
- *
- * 调用 prepare_to_wait_event(&wq_head, &__wq_entry, state)；
- *      // 其中 state = TASK_UNINTERRUPTIBLE    进程标记，表示进程不可打断
- *      // 函数在 kernel/sched/wait.c 中定义
- *
- * __builtin_constant_p()   // GCC 内建函数， 用于判断一个值是否为编译时常数，若值为常数则返回 1， 否则返回 0
- */
-wait_event_interruptible(queue, condition);
-wait_event_timeout(queue, condition, timeout);
-wait_event_interruptible_timeout(queue, consition, timeout);
-/*
- * 调用以上函数的进程会把它自己添加到queue对列上
- * 然后睡眠直到condition为1
- * queue: wait_queue_head_t 类型的变量，表示要等待的队列头
- * condition: 条件判断
- * timeout: 超时时限
- */
-
-/* 返回值：
- *      对于wait_event_interruptible, 返回0表示请求的条件得到满足
- * (condition变为1), 返回非0值表示被信号打断
- *      对于wait_event_interruptible_timeout， 返回值比较复杂:
- * return < 0 - 表示被信号打断
- * return > 0 - 表示条件得到满足 (condition -> 1) 并且时间还有富余，返回值表示剩余的时剪片
- * return = 0 - 表示超时，若返回值为0，应该监测condition值是否为1
- */
-
-// Linux 提供的唤醒函数
-void wake_up(wait_queue_head_t *queue);
-// 唤醒所有在给定等待队列的进程
-void wake_up_interruptible(wait_queue_head_t *queue);
-// 唤醒所有在指定等待队列上的可中断的进程
-/*
- * queue: wait_queue_head_t 类型的指针，表示队列头
- */
-
 ```
+
+- 等待队列定义与初始化
+    - 第一种方法
+        ```C
+        /* 等待队列定义与初始化 */
+        static wait_queue_head_t testqueue;
+        /*
+        * 在 linux-4.15 中定义为
+        * struct wait_queue_head {
+        *     spinlock_t              lock;
+        *     struct list_head        head;
+        * };
+        * typedef struct wait_queue_head wait_queue_head_t;
+        */
+        // 初始化调用方法
+        init_waitqueue_head(&testqueue);
+        /*
+        * extern void __init_waitqueue_head(struct wait_queue_head *wq_head, const char *name, struct lock_class_key *);
+        *
+        * #define init_waitqueue_head(wq_head)                         \
+        *     do {
+        *         static struct lock_class_key __key;                  \
+        *         __init_waitqueue_head((wq_head), #wq_head, &__key);  \
+        *     }while(0)
+        *
+        * void __init_waitqueue_head(struct wait_queue_head *wq_head, const char *name, struct lock_class_key *key)
+        * {
+        *         spin_lock_init(&wq_head->lock);
+        *         lockdep_set_class_and_name(&wq_head->lock, key, name);
+        *         INIT_LIST_HEAD(&wq_head->head);
+        * }
+        */
+        ```
+    - 第二种初始化方法  
+        ### ***<u>调用 宏 DECLARE_WAIT_QUEUE_HEAD() 进行初始化</u>***
+        ```C
+        #define __WAIT_QUEUE_HEAD_INITIALIZER(name) {                           \
+                .lock           = __SPIN_LOCK_UNLOCKED(name.lock),              \
+                .head           = { &(name).head, &(name).head } }
+
+        #define DECLARE_WAIT_QUEUE_HEAD(name) \
+                struct wait_queue_head name = __WAIT_QUEUE_HEAD_INITIALIZER(name)
+        ```
+
+- 内核睡眠函数
+    ```C
+    // Linux 内核提供的睡眠函数 在 include/linux/wait.h 中声明
+    wait_event(queue, contidion);
+    // 以 wait_event 为例，具体的调用代码见 include/linux/wait.h
+    /*
+    * 调用 wait_event()
+    * 对结构 struct wait_queue_entry 初始化
+    * struct wait_queue_entry {
+    *     unsigned int        flags;
+    *     void                *private;    // 指向当前进程结构体 - 进程控制块
+    *     wait_queue_func_t   func;
+    *     struct list_head    entry;
+    * };
+    *
+    * 调用 prepare_to_wait_event(&wq_head, &__wq_entry, state)；
+    *      // 其中 state = TASK_UNINTERRUPTIBLE    进程标记，表示进程不可打断
+    *      // 函数在 kernel/sched/wait.c 中定义
+    *
+    * __builtin_constant_p()   // GCC 内建函数， 用于判断一个值是否为编译时常数，若值为常数则返回 1， 否则返回 0
+    */
+    wait_event_interruptible(queue, condition);
+    wait_event_timeout(queue, condition, timeout);
+    wait_event_interruptible_timeout(queue, consition, timeout);
+    /*
+    * 调用以上函数的进程会把它自己添加到queue对列上
+    * 然后睡眠直到condition为1， 才可以被唤醒
+    * queue: wait_queue_head_t 类型的变量，表示要等待的队列头
+    * condition: 条件判断
+    * timeout: 超时时限
+    */
+
+    /* 返回值：
+    *      对于wait_event_interruptible, 返回0表示请求的条件得到满足
+    * (condition变为1), 返回非0值表示被信号打断
+    *      对于wait_event_interruptible_timeout， 返回值比较复杂:
+    * return < 0 - 表示被信号打断
+    * return > 0 - 表示条件得到满足 (condition -> 1) 并且时间还有富余，返回值表示剩余的时剪片
+    * return = 0 - 表示超时，若返回值为0，应该监测condition值是否为1
+    */
+
+    // Linux 提供的唤醒函数
+    void wake_up(wait_queue_head_t *queue);
+    // 唤醒所有在给定等待队列的进程
+    void wake_up_interruptible(wait_queue_head_t *queue);
+    // 唤醒所有在指定等待队列上的可中断的进程
+    /*
+    * queue: wait_queue_head_t 类型的指针，表示队列头
+    */
+    ```
+
+- 使用总结
+    - 睡眠
+        > 在进程上下文中可睡眠
+    - 唤醒
+        > 任何代码中都可以唤醒等待队列上的进程
