@@ -108,5 +108,30 @@
         /* 可以将文件映射到 vm_start 处 */
     };
     ```
-    <u>***使用命令 cat /proc/\<pid\>maps 查看进程的虚拟内存区域***</u>
-    7ff3ecccd000
+    <u>***命令行查看进程的虚拟内存区域***</u>
+    ```shell
+    $ cat /proc/pid/maps
+    ```
+- ## ***mmap 函数***
+    > man 手册：
+    > map or unmap files or devices into memory  
+    > 将文件或者设备映射到虚拟内存中  
+
+    ```C
+    /* 用户空间 mmap 函数 */
+    #include <sys/mman.h>
+
+    void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+    int munmap(void *addr, size_t length);
+    ```
+
+    - ### <u>***映射设备:***</u>
+        <u>***本质上是将驱动中属于设备的内存映射到进程空间的虚拟内存区域中***</u>
+
+    - ### <u>***用户空间mmap的内核实现***</u>
+        > *用户空间的 mmap() 会通过系统调用调用到内核的 do_mmap()函数*  
+        > do_mmap()函数会  
+        > 1.首先创建一个新的 ***用户空间VMA*** 并初始化， 然后加入进程的虚拟内存空间中  
+        > 2.然后调用***驱动的mmap()函数***建立上述***用户空间VMA***和***内核空间的内存地址***之间的联系(建立页表)
+
+        <u>***用户空间 mmap() 函数返回值为 vm_area_struct 中的 vm_start***</u>
