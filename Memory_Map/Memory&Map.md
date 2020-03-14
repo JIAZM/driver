@@ -115,7 +115,7 @@
 - ## ***mmap 函数***
     > man 手册：
     > map or unmap files or devices into memory  
-    > 将文件或者设备映射到虚拟内存中  
+    > 将文件或者***设备***映射到虚拟内存中  
 
     ```C
     /* 用户空间 mmap 函数 */
