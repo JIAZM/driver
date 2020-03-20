@@ -169,6 +169,7 @@
     ```
     <font color=lightslateblue size=4>platform 驱动注册函数</font>
     ```C
+    // 在 drivers/base/platform.c 中定义
     int __platform_driver_register(struct platform_driver *drv,
     struct module *owner)
     {
@@ -182,7 +183,9 @@
         return driver_register(&drv->driver);
         // 将驱动注册槽内核中
     }
-
+    // 在 include/linux/platform_device.h 中被重新声明
+    #define platform_driver_register(drv) \
+        __platform_driver_register(drv, THIS_MODULE)
     ```
 
 - Platform设备和驱动的匹配
