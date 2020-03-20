@@ -186,3 +186,24 @@
     ```
 
 - Platform设备和驱动的匹配
+```C
+// Platform 设备和驱动匹配函数
+static int platform_math(struct device *dev, struct device_driver *drv);
+/* 通过设备与驱动描述结构体进行匹配
+ * 使用 id_table或者 name
+ */
+```
+<u>***platform_driver_register()的实现***</u>  
+1. 从platform_bus上取出每一个platform_device设备，依次和platform_driver进行比较
+2. 通过 platform_match()来进行匹配
+3. 假如匹配成功，会调用 platform_driver的 probe()函数
+    ```C
+    static int platform_drv_probe(struct device *_dev)
+    {
+        struct platform_driver *drv = to_platform_driver(_dev->driver);
+        struct platform_device *dev = to_platform_device(_dev);
+
+        return drv->probe(dev);
+    }
+    ```
+    probe()的参数是一个platform_device,这个platform_device和要注册的platform_driver所匹配
