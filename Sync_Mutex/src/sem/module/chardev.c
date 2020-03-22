@@ -17,20 +17,20 @@ dev_t devNum;
 unsigned int subDevNum = 1;
 int reg_major = 232;
 int reg_minor = 0;
-struct semaphore sema;
-int xxx_count = 0;
+struct semaphore sema;	// 定义信号量
+int xxx_count = 0;		// 共享资源
 
 int testOpen(struct inode *p, struct file *f)
 {
-	down(&sema);
+	down(&sema);	// 获取信号量
 	if(xxx_count){
-		up(&sema);
+		up(&sema);	// 避免死锁
 		return -EBUSY;
 	}
 	
-	++xxx_count;
+	++xxx_count;	// 临界区
 
-	up(&sema);
+	up(&sema);		// 释放信号量
 	printk(KERN_EMERG"Device open OK ! \n");
 
 	return 0;
@@ -38,9 +38,9 @@ int testOpen(struct inode *p, struct file *f)
 
 int testRelease(struct inode *inode, struct file *filep)
 {
-	down(&sema);
-	--xxx_count;
-	up(&sema);
+	down(&sema);	// 获取信号量 上锁
+	--xxx_count;	// 临界区
+	up(&sema);		// 释放信号量
 
 	printk(KERN_EMERG"Device close OK !\n");
 
@@ -87,7 +87,7 @@ int charDrvInit(void)
 	cdev_init(gDev, gFile);
 	cdev_add(gDev, devNum, 3);
 
-	sema_init(&sema, 1);
+	sema_init(&sema, 1);	// 初始化信号量
 
 	return 0;
 }

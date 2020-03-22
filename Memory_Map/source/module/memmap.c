@@ -15,9 +15,9 @@ struct cdev *gdev;
 struct file_operations *gfile;
 
 dev_t devnum;
-int reg_major = 232;
-int reg_minor = 0;
-unsigned int subdevnum = 1;
+int reg_major = 232;	// 主设备号
+int reg_minor = 0;		// 次设备号
+unsigned int subdevnum = 1;		// 子设备数
 
 char *data = NULL;
 
@@ -28,12 +28,12 @@ int testOpen(struct inode *p, struct file *f)
 
 	printk(KERN_EMERG"test open ! \n");
 
-	data = kzalloc(MAX_MMAP_BUFFER, GFP_KERNEL);
+	data = kzalloc(MAX_MMAP_BUFFER, GFP_KERNEL);	// 分配内存
 	for(i = 0;i < MAX_MMAP_BUFFER;i++)
 		data[i] = i % 255;
 
 	for(i = 0;i < (MAX_MMAP_BUFFER/4096);i++){
-		mypage = virt_to_page((void *)(data + (i * PAGE_SIZE)));
+		mypage = virt_to_page((void *)(data + (i * PAGE_SIZE)));	// 将虚拟地址转换为页面
 		/* 1.get Physical address from virtual address
 		 * 2.get memory block's number from physical address
 		 * 3.get (struct page) from memory block's number
@@ -54,11 +54,11 @@ int testRelease(struct inode *p, struct file *f)
 	printk(KERN_EMERG"test close ! \n");
 
 	for(i = 0;i < (MAX_MMAP_BUFFER/4096);i++){
-		mypage = virt_to_page((void *)(data + (i * PAGE_SIZE)));
-		ClearPageReserved(mypage);
+		mypage = virt_to_page((void *)(data + (i * PAGE_SIZE)));	// 得到虚拟地址对应的物理页面
+		ClearPageReserved(mypage);	// 清除禁止swap标志
 	}
 
-	kfree(data);
+	kfree(data);	// 释放虚拟地址内存
 
 	return 0;
 }
@@ -68,14 +68,17 @@ static int testMmap(struct file *f, struct vm_area_struct *vma)
 	unsigned long phys, len;
 	unsigned long pfn;
 
+	// 通过虚拟地址得到物理地址
 	phys = virt_to_phys((void *)data);
+	// 计算映射虚拟地址长度
 	len = vma->vm_end - vma->vm_start;
 	printk(KERN_INFO"## vm_start is %lx \n", vma->vm_start);
 	printk(KERN_INFO"## vm_end is %lx \n", vma->vm_end);
 
-	pfn = phys >> PAGE_SHIFT;
+	pfn = phys >> PAGE_SHIFT;	// ?
 
 	if(remap_pfn_range(vma, vma->vm_start, pfn, len, vma->vm_page_prot)){
+	// 映射物理地址到虚拟地址VMA
 		printk("remap error \n");
 		return -EAGAIN;
 	}
