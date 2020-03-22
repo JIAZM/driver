@@ -36,6 +36,14 @@ int testOpen(struct inode *p, struct file *f)
     /* 信号量基本使用形式 */
     struct semaphore sem;   // 定义信号量
     void sema_init(struct semaphore *sem, int val); // 初始化信号量
+    /*
+    static inline void sema_init(struct semaphore *sem, int val)
+    {
+        static struct lock_class_key __key;
+        *sem = (struct semaphore) __SEMAPHORE_INITIALIZER(*sem, val);
+        lockdep_init_man(&sem->lock.dep_map, "semaphore->lock", &__key, 0);
+    }
+    */
     static inline void init_MUTEX (struct semaphore *sem)// 初始化互斥信号量 - 2.6.25及以后的linux内核版本废除了init_MUTEX函数
     {
         sema_init(sem, 0);
@@ -48,6 +56,7 @@ int testOpen(struct inode *p, struct file *f)
     sema_init(struct semaphore *sem, 1);
 
     /* 获得信号量 */
+    // 在 /kernel/locking/semaphore.c 中定义
     void down(struct semaphore *sem);
     // 获得信号量sem，会导致睡眠，不能用于中断上下文
     int down_interruptible(struct semaphore *sem);
