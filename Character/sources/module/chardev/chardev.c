@@ -1,11 +1,19 @@
+/* 包含初始化加载模块的头文件，代码中的MODULE_LICENSE在此头文件中 */
 #include <linux/module.h>
+/* 定义module_param module_param_array的头文件 */
 #include <linux/moduleparam.h>
+/* 定义字符设备的结构体 */
 #include <linux/cdev.h>
+/* 三个字符设备的函数声明 */
 #include <linux/fs.h>
+/* 阻塞机制 */
 #include <linux/wait.h>
-#include <linux/poll.h>
+/* 调度器 */
 #include <linux/sched.h>
+/* 分配内存空间的函数头文件 */
 #include <linux/slab.h>
+/* 包含device_create结构体class等头文件 */
+#include <linux/device.h>
 
 #define BUFFER_MAX	10
 #define OK	0
