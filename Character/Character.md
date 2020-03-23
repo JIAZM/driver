@@ -21,7 +21,7 @@
 
 /* 向内核注册设备号 - 静态
  * from 申请注册设备的起始设备号
- * count 需要申请的连续设备个数
+ * count 需要申请的连续设备个数, 当count < 2^20 时表示子设备数
  * name 设备名
  * 成功返回0    否则返回错误代码 */
 int register_chrdev_region(dev_t from, unsigned count, const char *name)
