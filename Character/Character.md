@@ -19,7 +19,7 @@
 #define MKDEV(ma, mi)   (((ma) << MINORBITS) | (mi))
 /* dev_t dev = MKDEV(ma, mi); */
 
-/* 向内核注册设备号 - 静态
+/* 向内核注册设备号 - 静态	在 fs/char_dev.c 中定义
  * from 申请注册设备的起始设备号
  * count 需要申请的连续设备个数, 当count < 2^20 时表示子设备数
  * name 设备名
