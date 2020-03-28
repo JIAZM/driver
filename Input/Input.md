@@ -39,16 +39,18 @@
     ![input_handle](./Input_handle.jpg)  
 
     ```C
-    struct input_id {   /* 在include/uapi/linux/input.h 中定义 */
-    // 描述设备硬件属性
-        __u16 bustype;  // 总线类型
-        __u16 vendor;   // 厂商编号
-        __u16 product;  // 设备编号
-        __u16 version;  // 设备版本号
-    }
     struct input_dev {  /* 在include/linux/input.h 中定义 */
         ...
         struct input_id id;
+        /* struct input_id {
+         *     // 描述设备硬件属性
+         *     // 在include/uapi/linux/input.h 中定义
+         *     __u16 bustype;  // 总线类型
+         *     __u16 vendor;   // 厂商编号
+         *     __u16 product;  // 设备编号
+         *     __u16 version;  // 设备版本号
+         * } */
+
         unsigned long propbit[BITS_TO_LONGS(INPUT_PROP_CNT)];
         /* 一系列bitmap
          * #define BIT_TO_LONGS(nr) DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
@@ -83,8 +85,71 @@
         struct list_head    h_node; // 链接到handler链表中
     };
     ```
-- Input事件驱动实例 ——/drivers/input/endev.c
+- Input事件驱动实例 ——/drivers/input/evdev.c
     > input 事件驱动不需要编写，系统已经提供了，例如 evdev、mousedev、keyboard等  
+    ```C
+    struct evdev {
+        int open;
+        struct input_handle handle;
+        wait_queue_head_t wait;
+        struct evdev_client __rcu *grab;
+        struct list_head client_list;
+        spinlock_t client_lock; /* protects client_list */
+        struct mutex mutex;
+        struct device dev; 
+        struct cdev cdev;   // file_operations 在这里包含 新版本内核与旧版本不同 ！！！
+        bool exist;
+    };
+    ```
+    ```C
+    /* 函数input_register_handler()分析 */
+    int input_register_handler(struct input_handler *handler)
+    {
+        struct input_dev *dev;
+        ...
+        list_for_each_entry(dev, &input_dev_list, node)
+        /* #define list_for_each_entry(pos, head, member)              \
+         *     for (pos = __container_of((head)->next, pos, member);   \
+         *         &pos->member != (head);                             \
+         *         pos = __container_of(pos->member.next, pos, member))
+         * 
+         * #define __container_of(ptr, sample, member)             \
+         *     (void *)container_of((ptr), typeof(*(sample)), member)
+         * 
+         * #ifndef container_of
+         * #define container_of(ptr, type, member) \
+         *     (type *)((char *)(ptr) - (char *) &((type *)0)->member)
+         * #endif   */
+        // 带入参数
+        /* for(dev = __container_of((input_dev_list->next, dev, node)); dev->node != input_dev_list; dev = __container_of(dev->node.next, dev, node))
+         * // dev->node != input_dev_list   判断是否到链表头(循环结束)
+         *     input_attach_handler(dev, handler);  // device与handler的匹配函数 在for循环成立时执行
+         *     
+         * __container_of(input_dev_list->next, dev, node)
+         * ---> (void *)container_of(input_dev_list->next, typeof(dev), node)
+         * ---> (struct input_dev *)((char *)(input_dev_list->next) - (char *)((struct input_dev *)0)->node)
+         */
+
+            input_attach_handler(dev, handler);
+            /* static int input_attach_handler(struct input_dev *dev, struct input_handler *handler)
+             * {
+             *     const struct input_device_id *id; 
+             *     int error;
+             * 
+             *     id = input_match_device(handler, dev);
+             *     if (!id)
+             *         return -ENODEV;
+             * 
+             *     error = handler->connect(handler, dev, id); 
+             *     if (error && error != -ENODEV)
+             *         pr_err("failed to attach handler %s to device %s, error: %d\n",
+             *             handler->name, kobject_name(&dev->dev.kobj), error);
+             * 
+             *     return error;
+             * }    */
+        ...
+    }
+    ```
 
 - Input设备驱动实例 ——/drivers/hid/usbhid/usbmouse.c
 
