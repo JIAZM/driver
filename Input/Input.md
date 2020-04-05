@@ -23,6 +23,9 @@
     - struct input_dev
         <font color=red>代表Input输入设备</font>  
         <font color=green>代表底层的设备，比如图中的"USB keyboard"或"PowerButton"(PC的电源键), 所有设备的input_dev对象保存在一个全局的input_dev队列中</font>
+        
+        ![input_dev_list](./input_dev_list.png)  
+
     - struct input_handler
         <font color=red>代表输入设备的处理方法 - 输入事件</font>  
         <font color=green>input_handler代表某类输入设备的处理方法，比如
@@ -36,7 +39,7 @@
         <font color=green>每一个input_handle都会生成一个文件节点。endev的
         handle就对应与/dev/input下的文件"event0~xx"通过input_handle可以
         找到对应的input_handler和input_dev</font>  
-    ![input_handle](./Input_handle.jpg)  
+    ![input_handler](./input_handler.png)  
 
     ```C
     struct input_dev {  /* 在include/linux/input.h 中定义 */
@@ -69,7 +72,7 @@
         const struct input_device_id *id_table;
         /* input_handler 为事件驱动
          * input_device_id 中的内容为 能够处理的事件和类型 */
-        struct list_head h_list;    // 作为一个节点链接到队列中
+        struct list_head h_list;    // 作为一个节点链接到队列中 - 内容为input_handle结构体
         struct list_head node;
     }
     struct input_handle {   // 表示一个input_dev 与一个input_handler 的对应关系
@@ -150,8 +153,36 @@
         ...
     }
     ```
+    ```C
+    static int evdev_connect(struct input_handler *handler, struct input_dev *dev,
+             const struct input_device_id *id)
+    {
+        ...
+        input_register_handle(&evdev->handle);
+        /* input_register_handle(struct input_handle *handle)  // 函数中的操作
+         * {
+         *     ...
+         *     list_add_tail_rcu(&handle->d_node, &dev->h_list);
+         *     // 将 handle->d_node添加至 dev->h_list尾部
+         *     list_add_tail_rcu(&handle->h_node, &handler->h_list);
+         *     // 将 handle->h_node添加至 handler->h_list尾部
+         *     ...
+         * } */
+
+    }
+    ```
+    ![input_handle](./input_handle.png)  
 
 - Input设备驱动实例 ——/drivers/hid/usbhid/usbmouse.c
+    ```C
+    struct input_event{     // /include/uapi/linux/input.h 中定义
+        struct timeval time;
+        __u16 type;
+        __u16 code;
+        __s32 value;
+    }
+    ```
+    event读取函数evdev中实际调用copy_to_user()
 
 - 输入事件从底层到上层的传递过程
 - 
