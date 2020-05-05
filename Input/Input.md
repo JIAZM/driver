@@ -56,9 +56,12 @@
 
         unsigned long propbit[BITS_TO_LONGS(INPUT_PROP_CNT)];
         /* 一系列bitmap
-         * #define BIT_TO_LONGS(nr) DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
+         * #define BITS_TO_LONGS(nr) DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
          * #define DIV_ROUND_UP __KERNEL_DIV_ROUND_UP
-         * #define __KERNEL_DIV_ROUND_UP(n, d)  (((n) + (d) - 1)/(d)) */
+         * #define __KERNEL_DIV_ROUND_UP(n, d)  (((n) + (d) - 1)/(d)) 
+         * -----
+         * BITS_TO_LONGS(nr) --> (nr + 32 - 1) / 32
+         */
         ...
         struct device dev;  // 设备基类
 
@@ -184,6 +187,115 @@
     ```
     event读取函数evdev中实际调用copy_to_user()
 
-- 输入事件从底层到上层的传递过程
+    在Linux中，Input设备用input_dev结构体描述，定义在input.h中。设备的驱动只需要按照如下步骤注册即可：
+    1. 分配一个struct input_dev：
+        struct input_dev *input_dev;
+    2. 初始化input_dev这个结构体
+    3. 注册这个input_dev设备
+        input_register_device(dev);
+    4. 在Input设备发生输入操作时(如：按键按下/抬起、鼠标移动等)，提交所发生的事件以及对应的键值或坐标状态等。
+    > input_report_*()  函数向上层报告事件
+
+    ```C
+        /* USB Mouse设备注册 */
+        // drivers/hid/usbhid/usbmouse.c 中对usbmouse驱动的定义
+        module_usb_driver(usb_mouse_driver);
+        
+        /* #define module_usb_driver(__usb_driver) \
+         *     module_driver(__usb_driver, usb_register, \
+         *         usb_deregister)
+         */
+        
+        #define module_driver(__driver, __register, __unregister, ...) \
+        static int __init __driver##_init(void) \
+        { \
+            return __register(&(__driver), ##__VA_ARGS__);  \
+        } \
+        module_init(__driver##_init);    \
+        static void __exit __driver##_exit(void)    \
+        { \
+            __unregister(&(__driver), ##__VA_ARGS__); \
+        } \
+        module_exit(__driver##_exit);
+
+        // 即存在 注册函数
+        module_init(usb_mouse_driver_init);
+            usb_register(&(usb_mouse_driver), ##__VA_ARGS__);
+        /* 
+         * #define usb_register(driver) \
+         *     usb_register_driver(driver, THIS_MODULE, KBUILD_MODNAME)
+         * extern int usb_register_driver(struct usb_friver *, struct module *,
+         *                                const char *);
+         */
+            usb_register_driver(&(usb_mouse_driver), THIS_MODULE, KBUILD_MODNAME);
+
+        // 取消注册函数
+        module_exit(usb_mouse_driver_exit);
+            usb_deregister(&(usb_mouse_driver), ##__VA_ARGS__);
+        /* extern void usb_deregister(struct usb_driver *); */
+    ```
+    ```C
+    static int usb_mouse_probe(struct usb_interface *intf, const struct usb_device_id *id)
+    {
+        /* USB Mouse设备注册成功后进入 probe 函数进行初始化 */
+
+        // 在probe 函数中初始化 struct input_dev
+        input_dev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_REL);
+        input_dev->keybit[BIT_WORD(BTN_MOUSE)] = BIT_MASK(BTN_LEFT) |
+                            BIT_MASK(BTN_RIGHT) | BIT_MASK(BTN_MIDDLE);
+        input_dev->relbit[0] = BIT_MASK(REL_X) | BIT_MASK(REL_Y);
+        input_dev->keybit[BIT_WORD(BTN_MOUSE)] |= BIT_MASK(BTN_SIDE) |
+                            BIT_MASK(BTN_EXTRA);
+        input_dev->relbit[0] |= BIT_MASK(REL_WHEEL);
+
+        /* struct input_dev{
+         *     ...
+         *     // evbit 表示支持的事件类型
+         *     unsigned long evbit[BITS_TO_LONGS(INPUT_PROP_CNT)];
+         * 
+         *     // 以下 bitmaps 表示具体事件类型下事件的编码
+         *     unsigned long keybit[BITS_TO_LONGS(KEY_CNT)];    // 按键事件
+         *     unsigned long relbit[BITS_TO_LONGS(REL_CNT)];    // 相对坐标事件
+         *     unsigned long absbit[BITS_TO_LONGS(ABS_CNT)];    // 绝对坐标事件
+         *     unsigned long mscbit[BITS_TO_LONGS(MSC_CNT)];
+         *     unsigned long ledbit[BITS_TO_LONGS(LED_CNT)];
+         *     unsigned long sndbit[BITS_TO_LONGS(SND_CNT)];
+         *     unsigned long ffbit[BITS_TO_LONGS(FF_CNT)];
+         *     unsigned long swbit[BITS_TO_LONGS(SW_CNT)];
+         *     ...
+         * }
+         * 
+         * #define BITS_PER_LONG        8
+         * 
+         * BIT_WORD()
+         * // 根据 bit位计算出nr在数组中第几个元素
+         * #define BIT_WORD(nr)        ((nr) / BITS_PER_LONG)
+         * 
+         * BIT_MASK()
+         * // 已知需要设定的bit在数组中的位置后找到具体的 bitmaps对应的bit位
+         * #define BIT_MASK(nr)        (1UL << ((nr) % BITS_PER_LONG))
+         */
+
+        // 最后使用input_register_device() 函数将input设备注册到内核中
+        error = input_register_device(mouse->dev);
+        if(error)
+            goto fail3;
+        ...
+    /* int input_register_device(struct input_dev *dev) // 注册Input_dev函数
+     * {
+     *     ...
+     *     // 与 evdev 注册函数大同小异
+     *     list_add_tail(&dev->node, &input_dev_list);
+     *     list_for_each_entry(handler, &input_handler_list, node)
+     *         // 匹配设备与驱动函数
+     *         input_attach_handler(dev, handler);
+     *         
+     *     ...
+     * }
+     */
+    }
+    ```
+
+- 输入事件从底层到上层的传递过程 && input设备数据流向
 - 
 </font>
