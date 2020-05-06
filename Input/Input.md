@@ -297,5 +297,87 @@
     ```
 
 - 输入事件从底层到上层的传递过程 && input设备数据流向
-- 
+    > USB Mouse底层数据走的是USB协议，具体的USB协议在后续的笔记中记录
+
+    鼠标的事件信息在函数 static void usb_mouse_irq(struct urb *urb) 中得到
+
+    函数 input_report_*() 像上层传递input信息
+    ```C
+    // 在 input.h 中定义
+    static inline void input_report_key(struct input_dev *dev, unsigned int code, int value)
+    {
+        input_event(dev, EV_KEY, code, value);
+    }
+    // input_report_key(dev, BTN_LEFT,   data[0] & 0x01);
+    // ---> input_event(dev, EV_KEY, BTN_LEFT, data[0] & 0x01);
+
+    /* 
+        void input_event(struct input_dev *dev, unsigned int type, unsigned int code, int value)
+        {
+            unsigned long flags;
+
+            if (is_event_supported(type, dev->evbit, EV_MAX)) {
+
+                spin_lock_irqsave(&dev->event_lock, flags);
+                input_handle_event(dev, type, code, value);
+                spin_unlock_irqrestore(&dev->event_lock, flags);
+            }    
+        }
+    */
+
+    static inline void input_report_rel(struct input_dev *dev, unsigned int code int value);
+    static inline void input_report_abs(struct input_dev *dev, unsigned int code, int value);
+    // ... 一系列函数在 include/linux/input.h 中定义
+    ```
+    最终通过 handler->event()或 handler->events()调用 evdev_event()或 evdev_events() event事件处理函数
+    ```C
+    // input_event(dev, EV_KEY, code, value);
+    void input_event(struct input_dev *dev, unsigned int type, unsigned int code, int value);
+    ---> /* 将type code value 传递进入 evdev_events()函数 */
+    static void evdev_event(struct input_handle *handle, unsigned int type, unsigned int code, int value)
+    {
+        struct input_value vals[] = { { type, code, value } };
+        evdev_events(handle, vals, 1);
+    }
+    static void evdev_events(struct input_handle *handle, const struct input_value *vals, unsigned int count);
+    // 
+    ```
+
+    从驱动中读事件：`static ssize_t evdev_read(struct file *file, char __user *buffer, size_t count, loff_t *ppos)`
+    ```C
+    static ssize_t evdev_read(struct file *file, char __user *buffer, size_t count, loff_t *ppos)
+    {
+        ...
+        while (read + input_event_size() <= count &&
+               evdev_fetch_next_event(client, &event)) {
+
+            if (input_event_to_user(buffer + read, &event))
+                return -EFAULT;
+                  
+            read += input_event_size();
+        }
+        /*
+        static int evdev_fetch_next_event(struct evdev_client *client, struct input_event *event)
+        {   
+            int have_event;                     
+            
+            spin_lock_irq(&client->buffer_lock);
+            
+            have_event = client->packet_head != client->tail;
+            if (have_event) {                   
+                *event = client->buffer[client->tail++];    // buffer中保存的就是事件
+                client->tail &= client->bufsize - 1;      
+            }
+            
+            spin_unlock_irq(&client->buffer_lock);
+            
+            return have_event;
+        }
+        */
+        ...
+    }
+    ```
+
+    数据流顺序：  
+    ![input事件传输流程](./Input事件传输流程.png)
 </font>
