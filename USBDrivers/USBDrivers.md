@@ -42,5 +42,61 @@
         </font>
 
 2. USB主控制器驱动
+    - 主控制器驱动功能
+        1. 解析和维护URB
+            > URB: USB Repuest Block, 数据通信的格式
+
+        2. 负责不同USB传输类型的调度工作
+        3. 负责USB数据的实际传输工作
+            > USB设备为主从式
+
+        4. 实现虚拟根HUB功能
+
+    - 硬件存在 - 集成在SOC中
+        > 硬件厂商会提供USB主控制器驱动
+
+    - 驱动架构
+        ![USB驱动架构](./USB驱动架构.png)
+        > ***<u>USB主控制器驱动文件位于　drivers/usb/host</u>***  
+
+        驱动文件命名规则：
+        *HCI-*.c  遵循*HCI标准的主控制器
+        > 例：ehci-exynos.c　三星Exynos系列处理器USB Host EHCI 控制器驱动　　
+        ***<u>/drivers/usb/host/ehci-exynos.c</u>***
+        ```C
+        // 可以看到是一个平台驱动的架构
+        static struct platform_driver ohci_hcd_s3c2410_driver = {
+            .probe      = ohci_hcd_s3c2410_probe,
+            .remove     = ohci_hcd_s3c2410_remove,
+            .shutdown   = usb_hcd_platform_shutdown,    
+            .driver     = {
+                .name   = "s3c2410-ohci",
+                .pm = &ohci_hcd_s3c2410_pm_ops,
+                .of_match_table = ohci_hcd_s3c2410_dt_ids,
+            },
+        };
+        ```
+        ## ***<u> 平台设备的注册一般都是在/arch/arm目录下进行　！！！ </u>***
+        > s3c2410-ohci 平台设备注册可以在 /arch/arm/plat-samsung/devs.c
+        ```C
+        struct platform_device s3c_device_ohci = {
+            .name           = "s3c2410-ohci",
+            .id             = -1,
+            .num_resources  = ARRAY_SIZE(s3c_usb_resource),
+            .resource       = s3c_usb_resource,
+            /*
+            static struct resource s3c_usb_resource[] = {
+                [0] = DEFINE_RES_MEM(S3C_PA_USBHOST, SZ_256),
+                [1] = DEFINE_RES_IRQ(IRQ_USBH),
+            };
+            */
+            .dev            = {
+                .dma_mask           = &samsung_device_dma_mask,
+                .coherent_dma_mask  = DMA_BIT_MASK(32),
+            }
+        };
+        ```
+
+
 
 3. USB设备驱动
