@@ -257,8 +257,137 @@
 		5. 等时传输
 			> 可以传输大批量数据，但是不能保证数据是否达到，用于对实时性要求较高的场合，例如音视频等设备
 
-	- usb repuest block, urb
+	- USB数据请求块(usb repuest block, URB)
+		> USB主控制器想操作USB外设时，要先向USB外设发送URB  
+		> 外设对URB产生回应，并且将回应信息发送会主控制器
+		
+		<u>URB 是USB数据传输机制使用的核心数据结构，URB供USB协议栈使用</u>  
+		```C
+		// URB 在 include/linux/usb.h 中定义
+		// 每一个 URB都是主机控制器发送给USB设备的端点(通过pipe)
+		struct urb {
+			...
+			unsigned int pipe;      /* (in) pipe information */
+			// USB设备端点与主机控制器通信时使用管道
+			// 给定 pipe号后才能通过 pipe号打开文件进行发送
+			...
+			void *transfer_buffer;      /* (in) associated data buffer */
+			// 当 URB表示out端点的时候，表示发送的数据
+			// 当 URB表示in 端点的时候，表示主机控制器要接受对端给发送的数据
+			...
+			dma_addr_t transfer_dma;    /* (in) dma addr for transfer_buffer */
+			// 有些设备支持 DMA操作，没有DMA时不用管
+			...
+			u32 transfer_buffer_length; /* (in) data buffer length */
+			// 表示 transfer_buffer[] 的长度
+			...
+			int interval;           /* (modify) transfer interval * (INT/ISO) */
+			// 表示希望主机控制器轮询USB设备时间间隔
+			...
+			void *context;          /* (in) context for completion */
+			// USB 设备给主机控制器回应数据时，需要知道之前发送的上下文
+			// context 中存放主机控制器向 USB设备发送 URB的上下文信息
+			...
+			usb_complete_t complete;    /* (in) completion routine */
+			// typedef void (*usb_complete_t)(struct urb *);
+			// URB 传输完成的回调函数
+			// URB的传输过程中，当URB的传输是一个异步操作时，主机把URB发送出去后，设备将信息回应给主机控制器后，就会执行 usb_complete_t函数
+			...
+
+			...
+		}
+		```
+		- URB 的使用方法
+			1. 分配 URB
+				```C
+				struct urb *usb_alloc_urb(int iso_packets, gfp_t mem_flags);
+				```
+			2. 初始化 URB
+				```C
+				static inline void usb_fill_[control | int | bulk]_urb(struct urb *urb, struct usb_device *dev, unsigned int pipe, unsigned char *setup_packet, void *transfer_buffer, int buffer_length, usb_complete_t complete_fn, void *context);
+
+				/** 
+				* usb_fill_control_urb - initializes a control urb
+				* @urb: pointer to the urb to initialize.
+				* @dev: pointer to the struct usb_device for this urb.
+				* @pipe: the endpoint pipe
+				* @setup_packet: pointer to the setup_packet buffer
+				* @transfer_buffer: pointer to the transfer buffer
+				* @buffer_length: length of the transfer buffer
+				* @complete_fn: pointer to the usb_complete_t function
+				* @context: what to set the urb context to.
+				*  
+				* Initializes a control urb with the proper information needed to submit
+				* it to a device.
+				*/
+				static inline void usb_fill_control_urb(struct urb *urb,
+									struct usb_device *dev,
+									unsigned int pipe,
+									unsigned char *setup_packet,
+									void *transfer_buffer,
+									int buffer_length,
+									usb_complete_t complete_fn,
+									void *context)
+				{   
+					urb->dev = dev;
+					urb->pipe = pipe;
+					urb->setup_packet = setup_packet;
+					urb->transfer_buffer = transfer_buffer;
+					urb->transfer_buffer_length = buffer_length;
+					urb->complete = complete_fn;
+					urb->context = context;
+				}
+				// 分别初始化 [控制 | 终端 | 批量]传输 URB
+				// 以上辅助函数不适用于等时传输，等时传输有单独的方式
+				```
+			- 提交 URB	提交给主机控制器，由主机控制器发送给USB设备
+    			- 异步提交
+
+				- 同步提交
 		- USB 主控制器和USB外设通信协议
 		- 中控制器发送urb的方式
-    		- 同步方式
     		- 异步方式
+				> 提交完成后执行通过 usb_fill_[]_urb()传入的回调函数
+				```C
+				int usb_submit_urb(struct urb *urb, gfp_t mem_flags);
+				```
+    		- 同步方式
+				```C
+				int usb_[control | interrupt | bulk]_msg(struct usb_device *dev, unsigned int pipe,
+					__u8 request, __u8 requesttype, __u16 value, __u16 index,
+					void *data, __u16 size, int timeout);
+				```
+4. USB 驱动设备结构
+	> `struct usb_device 描述一个usb设备`
+	```C
+	struct usb_device {
+		...
+		enum usb_device_state   state;
+    	enum usb_device_speed   speed;
+		...
+		struct usb_device *parent;
+		...
+		struct usb_device_descriptor descriptor;
+		struct usb_host_config *config;
+		struct usb_host_config *actconfig;
+		...
+		int maxchild;
+	}
+	```
+
+	- 管道
+		> 每个端点通过管道和 USB主控制器连接，管道包括以下几个部分：
+		1. 端点地址
+		2. 数据传输方向 (in | out)
+		3. 数据传输模式
+		```C
+		// 返回值为 pipe描述符
+		usb_[rcv | snd][ctrl | int | bulk | isoc]pipe(struct usb_device *dev, __u8 endpointAddress);
+		/*
+			static inline unsigned int __create_pipe(struct usb_device *dev, 
+					unsigned int endpoint)
+			{
+				return (dev->devnum << 8) | (endpoint << 15);
+			}
+		*/
+		```
